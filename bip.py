@@ -16,8 +16,16 @@ def test_sort():
     for k, v in DOMINANT.items():
         print(k,v)
 
+def create_histo(img):
+    color = ('b','g','r')
+    for i,c in enumerate(color):
+        hist = cv2.calcHist([img],[i],None,[256],[0,256])
+        plt.plot(hist,color = c)
+        plt.xlim([0,256])
+    plt.show()
 
-def dominant_color(file,img):
+
+def sort_color(file,img):
     colorspace = cv2.COLOR_BGR2HSV
     channels = [0,1,2]
     mtp = np.mean(np.mean(img,0),0)
@@ -34,9 +42,8 @@ def dominant_color(file,img):
                     DOMINANT['green'].append(file)
                 elif np.argwhere(mtp == channel) == 2:
                     DOMINANT['red'].append(file)
-
-    #cv2.imshow('Image', img)
-    #print(mtp[channels])
+    
+    create_histo(img)
     
     
 #Main function handling input, output and process flow
@@ -46,13 +53,10 @@ def main():
         sys.exit()
     folder = sys.argv[1]
     
-    #img = cv2.imread(folder, cv2.IMREAD_UNCHANGED)
-    #dominant_color(folder,img)
-    
     for file in os.listdir(folder):
         if file.split('.')[1].lower() in EXTENSIONS:
             img = cv2.imread(os.path.join(folder, file), cv2.IMREAD_UNCHANGED)
-            dominant_color(file,img)
+            sort_color(file,img)
     test_sort()
     
     
