@@ -42,7 +42,7 @@ def dominant_color(file,img):
 #Main function handling input, output and process flow
 def main():
     if (len(sys.argv) < 2):
-        print('Need target image(s).') #need directory path
+        print('Need target directory')
         sys.exit()
     folder = sys.argv[1]
     
