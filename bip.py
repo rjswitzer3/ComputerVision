@@ -23,17 +23,17 @@ def dominant_color(file,img):
     mtp = np.mean(np.mean(img,0),0)
     dom = max(mtp[channels])
     
-    if dom == 0 or np.count_nonzero(mtp == dom) > 1:
+    if np.count_nonzero(mtp == dom) > 1:
         DOMINANT['none'].append(file)
-    
-    for channel in mtp:
-        if dom == channel:
-            if np.argwhere(mtp == channel) == 0:
-                DOMINANT['blue'].append(file)
-            elif np.argwhere(mtp == channel) == 1:
-                DOMINANT['green'].append(file)
-            elif np.argwhere(mtp == channel) == 2:
-                DOMINANT['red'].append(file)
+    else:
+        for channel in mtp:
+            if dom == channel:
+                if np.argwhere(mtp == channel) == 0:
+                    DOMINANT['blue'].append(file)
+                elif np.argwhere(mtp == channel) == 1:
+                    DOMINANT['green'].append(file)
+                elif np.argwhere(mtp == channel) == 2:
+                    DOMINANT['red'].append(file)
 
     #cv2.imshow('Image', img)
     #print(mtp[channels])
@@ -46,13 +46,13 @@ def main():
         sys.exit()
     folder = sys.argv[1]
     
-    img = cv2.imread(folder, cv2.IMREAD_UNCHANGED)
-    dominant_color(folder,img)
+    #img = cv2.imread(folder, cv2.IMREAD_UNCHANGED)
+    #dominant_color(folder,img)
     
-    #for file in os.listdir(folder):
-    #    if file.split('.')[1].lower() in EXTENSIONS:
-    #        img = cv2.imread(file, cv2.IMREAD_UNCHANGED)
-    #        dominant_color(file,img)
+    for file in os.listdir(folder):
+        if file.split('.')[1].lower() in EXTENSIONS:
+            img = cv2.imread(os.path.join(folder, file), cv2.IMREAD_UNCHANGED)
+            dominant_color(file,img)
     test_sort()
     
     
