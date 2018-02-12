@@ -23,11 +23,15 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','jpx','j2k','j2c','fpx', \
                   'cgm','svg','gif'])
 
 
-#Test function to verify color sorting functionality
+#Test function to verify color sorting and to print the count of each
 def test_sort():
     for k, v in DOMINANT.items():
         print(k,v)
-        
+    print('Red: '+str(len(DOMINANT['red'])))
+    print('Green: '+str(len(DOMINANT['green'])))
+    print('Blue: '+str(len(DOMINANT['blue'])))
+    print('None: '+str(len(DOMINANT['none'])))
+
 
 #Perform histogram equalization, plot it and write resultant image
 def histo_equalization(file,img):
@@ -41,14 +45,14 @@ def histo_equalization(file,img):
     cv2.imwrite('eqResult_'+file,result)
     
     #Create resulting image name and write
-    #newfile = '.'.join(file.split('.')[:-1]) + '_eq.' + file.split('.')[-1]
-    #cv2.imwrite(newfile, img_eq)
+    newfile = '.'.join(file.split('.')[:-1]) + '_eq.' + file.split('.')[-1]
+    cv2.imwrite(newfile, img_eq)
     
-    #Plot equalized image histogram
+    #Plot equalized image's histogram
     create_histo(img_eq)
 
 
-#Plot
+#Generate a histogram plot for the given image
 def create_histo(img):
     color = ('b','g','r')
     for i,c in enumerate(color):
@@ -58,7 +62,7 @@ def create_histo(img):
     plt.show()
 
 
-#Determine the dominant color and store accordingly
+#Determine the dominant color and allocate accordingly
 def sort_color(file,img):
     channels = [0,1,2]
     mtp = np.mean(np.mean(img,0),0)
@@ -88,14 +92,11 @@ def main():
     for file in os.listdir(folder):
         path = os.path.join(folder, file)
         if not os.path.isdir(path) and file.split('.')[1].lower() in EXTENSIONS:
-            print(file) #REMOVE TEST
-            img = cv2.imread(os.path.join(folder, file), cv2.IMREAD_UNCHANGED)
+            img = cv2.imread(os.path.join(folder, file), cv2.IMREAD_COLOR)
             sort_color(file,img)
-            
             create_histo(img)
-            
             histo_equalization(file,img)
     test_sort()
-    
+
     
 main()
