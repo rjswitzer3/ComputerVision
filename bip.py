@@ -5,7 +5,7 @@ Basic image processing script written in python using OpenCV to determine the
 dominant color of an image, sort accordingly, plot the original histogram,
 perform histogram equalization and then plot the resulting image histogram
 (i.e. after equalization). Resulting images of the equalization shall be written
-to  disk using the following naming convention <image gname>_eq.<extension>.
+to disk using the following naming convention <image name>_eq.<extension>.
 '''
 import pdb
 import cv2
@@ -15,7 +15,7 @@ import math
 from matplotlib import pyplot as plt
 import numpy as np
 
-#Dictionary to sort images by color dominance
+#Dictionary to allocate images by color dominance
 DOMINANT = {'red': [], 'green': [], 'blue': [], 'none': []}
 #Set of accepted image formats
 EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','jpx','j2k','j2c','fpx', \
