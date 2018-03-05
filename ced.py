@@ -12,6 +12,7 @@ import os
 import math
 from scipy.signal import convolve2d
 
+
 #Set of accepted image formats
 EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','jpx','j2k','j2c','fpx', \
                   'pcd','pdf','png','ppm','webp','bmp','bpg','dib','wav', \
