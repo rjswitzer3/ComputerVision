@@ -2,8 +2,8 @@
 @Author Ryan Switzer
 
 Rudimentary implementation of the canny edge detection algorithm written in
-python using OpenCV. Resulting images of the convolution shall be written to
-disk using the following naming convention <image name>_conv.<extension>.
+python using OpenCV. Resulting images of the algorithm shall be written to
+disk using the following naming convention <image name>_<conv|grad|edge>.<extension>.
 '''
 import cv2
 import numpy as np
@@ -16,11 +16,13 @@ from scipy.signal import convolve2d
 EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','jpx','j2k','j2c','fpx', \
                   'pcd','pdf','png','ppm','webp','bmp','bpg','dib','wav', \
                   'cgm','svg','gif'])
+#Path where the image shall exist
+PATH = 'TEST_IMAGES/'
 
 
 def init_kernel(values):
     '''
-    Initialize a kernel with the given size
+    Initialize a kernel with the given values
     @params:
         values: array of values to be used to establish the kernel
     @return:
@@ -37,43 +39,57 @@ def init_kernel(values):
     return kernel
 
 
-def test_conv(img,conv,kernel,path):
+def test_conv(img,conv,kernel):
     '''
-    Quick test function to write the results of convolution side-by-side
+    Quick test to verify results of ritconv() and convolve2d are equal
     @params:
         img: the original input images
         conv: the resultant image post convolution
         kernel: the filter used for the convolution
-        path: the image file path
     @returns:
         None
     '''
     test_2d = convolve2d(img,kernel)
-    comp = np.hstack((conv,test_2d))
 
-    newfile = '.'.join(path.split('.')[:-1]) + '_TEST-CONV.' + path.split('.')[-1]
-    cv2.imwrite(newfile, comp)
+    #TODO Investigate how to correct test
+    #Result of convole2d is bigger than original, thus proceeding check fails
+    print(np.array_equal(conv,test_2d))
+
+    #Write results to preform eye test
+    #comp = np.hstack((conv,test_2d))
+    #newfile = '.'.join(PATH.split('.')[:-1]) + '_TEST-CONV.' + PATH.split('.')[-1]
+    #cv2.imwrite(newfile, test_2d)
 
 
-def write_result(img,conv,kernel,path):
+def write_result(img,conv,kernel,name):
     '''
     Write the results of the canny edge detection
     @params:
         img: the original input images
         conv: the resultant image post convolution
         kernel: the filter used for the convolution
-        path: the image file path
+        name: the name descriptor for the image
     @returns:
         None
     '''
-    newfile = '.'.join(path.split('.')[:-1]) + '_conv.' + path.split('.')[-1]
+    newfile = '.'.join(PATH.split('.')[:-1]) + '_'+name+'.' + PATH.split('.')[-1]
 
     # Create side-by-side comparison and write
-    result = np.hstack((img,conv))
-    cv2.imwrite(newfile, result)
+    #result = np.hstack((img,conv))
+    cv2.imwrite(newfile, conv)
 
     #Test that the convolution implementation is working correctly
-    #test_conv(img,conv,kernel,path)
+    test_conv(img,conv,kernel)
+
+
+def nms():
+    # TODO Implement me
+	return None
+
+
+def hysteresis():
+    # TODO Implement me
+    return None
 
 
 def ritconv(img,kernel):
@@ -114,14 +130,45 @@ def ritconv(img,kernel):
     return conv_img
 
 
-def ritgrad():
-    # TODO Implement me
-    return None
+def ritgrad(conv):
+    '''
+    @params:
+        conv: image with noise reduction
+    @returns:
+        gradient: matrix containing the gradient magnitudes as floats
+        angles: matrix containing the gradient angle
+    '''
+    sobelx = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) #sobelx
+    sobely = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]]) #sobely
+
+    gx = ritconv(conv,sobelx)
+    gy = ritconv(conv,sobely)
+
+    gradient = np.sqrt(gx.astype(np.float32)**2 + gy.astype(np.float32)**2)
+    angles = np.arctan2(gy,gx)
+
+    return [gradient, angles]
 
 
 def ritcan(image,scale,weak,strong):
-    # TODO Implement me
-    return None
+    '''
+    Implementation of the canny edge detection algorithm
+    @params:
+        image: the input image to preform canny edge detection on
+        scale: the kernel used for the convolution (i.e. Gaussian filter)
+        weak: the weak edge threshold
+        strong: the strong edge threshold
+    @returns:
+        none
+    '''
+    kernel = scale
+    conv_img = ritconv(image,kernel)
+    gradient,angles = ritgrad(conv_img)
+
+    write_result(image,conv_img,kernel,'conv')
+    write_result(image,gradient,kernel,'grad')
+    #TODO implement non-maximum-supression
+    #TODO implement hysteresis threshold
 
 
 def main():
@@ -137,20 +184,12 @@ def main():
         sys.exit()
     path = sys.argv[1]
 
-    #Various filters
-    #kernel = init_kernel([1,4,6,4,1])
-    #kernel = init_kernel([.00390625,.015625,.0234375,.015625,.00390625])
-    #kernel = init_kernel([.25,.5,.25])
-    #kernel = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) #sobelx
-    #kernel = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]]) #sobely
-    kernel = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]]) #Laplacian
-
-
     if not os.path.isdir(path) and path.split('.')[1].lower() in EXTENSIONS:
+        global PATH
+        PATH = path
+        kernel = init_kernel([.25,.5,.25]) #Gaussian
         img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-        conv_img = ritconv(img,kernel)
-
-        write_result(img,conv_img,kernel,path)
+        ritcan(img,kernel,100,200)
     else:
         print('File format not supported and/or file does not exist')
 
