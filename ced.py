@@ -40,26 +40,37 @@ def init_kernel(values):
     return kernel
 
 
-def test_conv(img,conv,kernel):
+def test_conv(img,kernel):
     '''
-    Quick test to verify results of ritconv() and convolve2d are equal
+    Quick test to verify results of ritconv() against convolve2d()
+    (i.e. confirm margin of error within 1%)
     @params:
         img: the original input images
-        conv: the resultant image post convolution
-        kernel: the filter used for the convolution
+        kernel: the filter/kernel used for the convolution
     @returns:
         None
     '''
+    conv = ritconv(img,kernel)
     test_2d = convolve2d(img,kernel)
 
-    #TODO Investigate how to correct test
-    #Result of convole2d is bigger than original, thus proceeding check fails
-    print(np.array_equal(conv,test_2d))
+    print('Margin of error (%) of ritconv() vs convolve2d()')
+    print(np.mean(conv != test_2d).sum()/float(conv.size))
 
-    #Write results to preform eye test
-    #comp = np.hstack((conv,test_2d))
-    #newfile = '.'.join(PATH.split('.')[:-1]) + '_TEST-CONV.' + PATH.split('.')[-1]
-    #cv2.imwrite(newfile, test_2d)
+
+def test_can(img,edges):
+    '''
+    Quick test to verify the results of ritcan() against cv2.canny()
+    (i.e. confirm margin of error within 1% )
+    @params:
+        img: the original input images
+        edges: the result of ritcan()
+    @returns:
+        None
+    '''
+    can = cv2.Canny(img,100,200)
+
+    print('Margin of error (%) of ritcan() vs cv2.canny()')
+    print(np.mean(edges != can).sum()/float(edges.size))
 
 
 def write_result(imgs,img,name):
@@ -84,17 +95,22 @@ def write_result(imgs,img,name):
 
 def nms(img,grad,thetaQ):
     '''
-    Preforms non-maxmimum supression on the gradient matrix to derive the
+    Preforms non-maxmimum supression on the gradient image to derive an image
+    with thin edges
     @params:
-
+        img: the oringal input images
+        grad: the gradient resultant images
+        thetaQ: the quantized gradient direction
     @returns:
-
+        grad_sup: the non-maximum suppression resultant image
     '''
     grad_sup = grad.copy()
     height,width = img.shape
 
+    #Non-maximum suppression
     for i in range(width):
         for j in range(height):
+            #Suppress pixels on image edge
             if (i == 0) or (i == width-1) or (j == 0) or (j == height - 1):
                 grad_sup[i][j] = 0
                 continue
@@ -118,16 +134,16 @@ def nms(img,grad,thetaQ):
 
 def hysteresis(img,grad_sup,strong,weak):
     '''
-    Determines which edges are really edges and whicha are not using
-    thresholding and tracing the edges via finding weak edge pixels near strong
-    edge pixels.
+    Determines which edges are really edges and which are not using
+    thresholding to trace the edges by finding weak edge pixels near strong
+    edge pixels. (i.e. remove small pixel noise)
     @params:
         img: the original images
         grad_sup: the gradient supression resultant matrix
         strong: upper threshold value
         weak: lower threshold value
     @returns:
-        final_edges: extened strong edges
+        final_edges: image with 'strong' edges
     '''
     strong_edges = (grad_sup > strong)
     threshold_edges = np.array(strong_edges, dtype=np.uint8) + (grad_sup > weak)
@@ -172,7 +188,8 @@ def hysteresis(img,grad_sup,strong,weak):
 
 def ritconv(img,kernel):
     '''
-    Preforms basic 2D convolution on the input image. Convolution uses float32
+    Preforms rudimentary 2D convolution on the input image.
+    Convolution imposes usage of float32.
     @params:
         img: the input image to preform the convolution on
         kernel: the filter used for the convolution
@@ -252,6 +269,8 @@ def ritcan(image,scale,weak,strong):
     write_result(None,edges,'edge')
     write_result([conv_img,grad,edges],None,'all')
 
+    return edges
+
 
 def main():
     '''
@@ -271,7 +290,12 @@ def main():
         PATH = path
         kernel = init_kernel([.25,.5,.25]) #Gaussian
         img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-        ritcan(img,kernel,100,200)
+        edges = ritcan(img,kernel,100,200)
+
+        # TESTS for error margin
+        #test_conv(img,kernel)
+        #test_can(img,edges)
+
     else:
         print('File format not supported and/or file does not exist')
 
