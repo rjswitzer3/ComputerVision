@@ -83,14 +83,88 @@ def write_result(img,conv,kernel,name):
     test_conv(img,conv,kernel)
 
 
-def nms():
-    # TODO Implement me
-	return None
+def nms(img,grad,thetaQ):
+    '''
+    Preforms non-maxmimum supression on the gradient matrix to derive the
+    @params:
+
+    @returns:
+
+    '''
+    grad_sup = grad.copy()
+    height,width = img.shape
+
+    for i in range(width):
+        for j in range(height):
+            if (i == 0) or (i == width-1) or (j == 0) or (j == height - 1):
+                grad_sup[i][j] = 0
+                continue
+
+            tq = thetaQ[i][j] % 4
+            if tq == 0:
+                if (grad[i][j] <= grad[i][j-1]) or (grad[i][j] <= grad[i][j+1]):
+                    grad_sup[i][j] = 0
+            if tq == 1:
+                if (grad[i][j] <= grad[i-1][j+1]) or (grad[i][j] <= grad[i+1][j-1]):
+                    grad_sup[i][j] = 0
+            if tq == 2:
+                if (grad[i][j] <= grad[i-1][j]) or (grad[i][j] <= grad[i+1][j]):
+                    grad_sup[i][j] = 0
+            if tq == 3:
+                if (grad[i][j] <= grad[i-1][j-1]) or (grad[i][j] <= grad[i+1][j+1]):
+                    grad_sup[i][j] = 0
+
+    return grad_sup
 
 
-def hysteresis():
-    # TODO Implement me
-    return None
+def hysteresis(img,grad_sup,strong,weak):
+    '''
+    Determines which edges are really edges and whicha are not using
+    thresholding and tracing the edges via finding weak edge pixels near strong
+    edge pixels.
+    @params:
+        img: the original images
+        grad_sup: the gradient supression resultant matrix
+        strong: upper threshold value
+        weak: lower threshold value
+    @returns:
+        final_edges: extened strong edges
+    '''
+    strong_edges = (grad_sup > strong)
+    threshold_edges = np.array(strong_edges, dtype=np.uint8) + (grad_sup > weak)
+    final_edges = strong_edges.copy().astype(np.float32)
+    height,width = img.shape
+    pixels = []
+
+    for i in range(1, width-1):
+        for j in range(1, height-1):
+            if threshold_edges[i][j] != 1:
+                continue
+            local = threshold_edges[i-1:i+2,j-1:j+2]
+            local_max = 0
+            try:
+                local_max = local.max()
+            except ValueError:
+                pass
+            if local_max == 2:
+                pixels.append((i,j))
+                final_edges[i][j] = 1
+
+    while len(pixels) > 0:
+        newPixels = []
+        for i,j in pixels:
+            for di in range(-1,2):
+                for dj in range(-1,2):
+                    if di == 0 and dj == 0:
+                        continue
+                    ii = i+di
+                    jj = j+dj
+                    if threshold_edges[ii][jj] == 1 and final_edges[ii][jj] == 0:
+                        newPixels.append((ii,jj))
+                        final_edges[ii][jj] = 1
+        pixels = newPixels
+
+    return final_edges
 
 
 def ritconv(img,kernel):
@@ -137,7 +211,7 @@ def ritgrad(conv):
         conv: image with noise reduction
     @returns:
         gradient: matrix containing the gradient magnitudes as floats
-        angles: matrix containing the gradient angle
+        theta: matrix containing the gradient angles
     '''
     sobelx = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) #sobelx
     sobely = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]]) #sobely
@@ -146,9 +220,9 @@ def ritgrad(conv):
     gy = ritconv(conv,sobely)
 
     gradient = np.sqrt(gx.astype(np.float32)**2 + gy.astype(np.float32)**2)
-    angles = np.arctan2(gy,gx)
+    theta = np.arctan2(gy,gx)
 
-    return [gradient, angles]
+    return [gradient, theta]
 
 
 def ritcan(image,scale,weak,strong):
@@ -164,12 +238,19 @@ def ritcan(image,scale,weak,strong):
     '''
     kernel = scale
     conv_img = ritconv(image,kernel)
-    gradient,angles = ritgrad(conv_img)
+    grad,theta = ritgrad(conv_img)
+
+    thetaQ = (np.round(theta * (5.0 / np.pi)) + 5) % 5
+    grad_sup = nms(image,grad,thetaQ)
+    edges = hysteresis(image,grad_sup,strong,weak)
+    print(type(edges[0][0]))
+    print(type(grad_sup[0][0]))
 
     write_result(image,conv_img,kernel,'conv')
-    write_result(image,gradient,kernel,'grad')
-    #TODO implement non-maximum-supression
-    #TODO implement hysteresis threshold
+    write_result(image,grad,kernel,'grad')
+    #cv2.imshow(edges)
+    write_result(image,grad_sup,kernel,'sup')
+    write_result(image,edges,kernel,'edge')
 
 
 def main():
