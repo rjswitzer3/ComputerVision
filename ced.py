@@ -62,25 +62,24 @@ def test_conv(img,conv,kernel):
     #cv2.imwrite(newfile, test_2d)
 
 
-def write_result(img,conv,kernel,name):
+def write_result(imgs,img,name):
     '''
     Write the results of the canny edge detection
     @params:
-        img: the original input images
-        conv: the resultant image post convolution
-        kernel: the filter used for the convolution
+        imgs: list of all images
+        img: the resultant image post manipulation
         name: the name descriptor for the image
     @returns:
         None
     '''
     newfile = '.'.join(PATH.split('.')[:-1]) + '_'+name+'.' + PATH.split('.')[-1]
 
-    # Create side-by-side comparison and write
-    #result = np.hstack((img,conv))
-    cv2.imwrite(newfile, conv)
-
-    #Test that the convolution implementation is working correctly
-    test_conv(img,conv,kernel)
+    if imgs != None:
+        # Create side-by-side comparison and write
+        result = np.hstack(imgs)
+        cv2.imwrite(newfile,result)
+    else:
+        cv2.imwrite(newfile, img)
 
 
 def nms(img,grad,thetaQ):
@@ -136,22 +135,20 @@ def hysteresis(img,grad_sup,strong,weak):
     height,width = img.shape
     pixels = []
 
+    # Tace edges & Find weak edge pixels near strong edge pixels
     for i in range(1, width-1):
         for j in range(1, height-1):
             if threshold_edges[i][j] != 1:
                 continue
             local = threshold_edges[i-1:i+2,j-1:j+2]
-            local_max = 0
-            try:
-                local_max = local.max()
-            except ValueError:
-                pass
+            local_max = local.max()
             if local_max == 2:
                 pixels.append((i,j))
                 final_edges[i][j] = 1
 
+    # Extend strong edges
     while len(pixels) > 0:
-        newPixels = []
+        new_pixels = []
         for i,j in pixels:
             for di in range(-1,2):
                 for dj in range(-1,2):
@@ -160,9 +157,15 @@ def hysteresis(img,grad_sup,strong,weak):
                     ii = i+di
                     jj = j+dj
                     if threshold_edges[ii][jj] == 1 and final_edges[ii][jj] == 0:
-                        newPixels.append((ii,jj))
+                        new_pixels.append((ii,jj))
                         final_edges[ii][jj] = 1
-        pixels = newPixels
+        pixels = new_pixels
+
+    # Set edge pixel to maximum intensity
+    for i in range(width):
+        for j in range(height):
+            if final_edges[i][j] == 1:
+                final_edges[i][j] = 255
 
     return final_edges
 
@@ -243,14 +246,11 @@ def ritcan(image,scale,weak,strong):
     thetaQ = (np.round(theta * (5.0 / np.pi)) + 5) % 5
     grad_sup = nms(image,grad,thetaQ)
     edges = hysteresis(image,grad_sup,strong,weak)
-    print(type(edges[0][0]))
-    print(type(grad_sup[0][0]))
 
-    write_result(image,conv_img,kernel,'conv')
-    write_result(image,grad,kernel,'grad')
-    #cv2.imshow(edges)
-    write_result(image,grad_sup,kernel,'sup')
-    write_result(image,edges,kernel,'edge')
+    write_result(None,conv_img,'conv')
+    write_result(None,grad,'grad')
+    write_result(None,edges,'edge')
+    write_result([conv_img,grad,edges],None,'all')
 
 
 def main():
