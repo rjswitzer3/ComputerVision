@@ -54,6 +54,14 @@ def write_result(imgs,img,name):
 
 
 def init(img):
+    '''
+    Derive pertinent gradient information from the designated image
+    @params:
+        conv: image with noise reduction
+    @returns:
+        gradient: matrix containing the gradient magnitudes as floats
+        thetaQ: matrix containing the gradient angles (quantized)
+    '''
     sobelx = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) #sobelx
     sobely = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]]) #sobely
 
@@ -88,18 +96,25 @@ def main():
         gb_img = cv.GaussianBlur(img,(5,5),0)
         grad,theta = init(gb_img)
 
-        #thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+        #threshT = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
         thresh = cv.adaptiveThreshold(gb_img, 255, \
                     cv.ADAPTIVE_THRESH_GAUSSIAN_C, \
                     cv.THRESH_BINARY_INV,11,1)
         kernel = np.ones((3,3),np.uint8)
         erode = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel, iterations=3)
 
-        write_result([img,gb_img,thresh,erode],None,'progression')
+        cont_img = erode.copy()
+        contours = cv.findContours(cont_img,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE)
 
-        #plt.imshow(ret,'ret')
-        #plt.imshow(th,'th')
-        #plt.show()
+        #for c in contours:
+        #    area = cv.contourArea(c)
+        #    if area < 2000 or area > 4000:
+        #        continue
+        #    if len(c)<5:
+        #        di = cv.fitEllipse(c)
+        #        cv.ellipse(img,di,(0,255,0),2)
+
+        write_result([img,gb_img,thresh,erode],None,'progression')
 
         #threshold( gray, thr, 100,255,THRESH_BINARY ); Greyscale -> binary
 
