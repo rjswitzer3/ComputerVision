@@ -6,7 +6,7 @@ import sys
 import os
 import math
 
-PATH = '../img/images/'
+PATH = 'images/'
 
 #Set of accepted image formats
 EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','jpx','j2k','j2c','fpx', \
@@ -33,29 +33,75 @@ def init_kernel(values):
     return kernel
 
 
-def morph():
-    #TODO implement algorithm
-    return None
+def write_result(imgs,img,name):
+    '''
+    Write the results of the canny edge detection
+    @params:
+        imgs: list of all images
+        img: the resultant image post manipulation
+        name: the name descriptor for the image
+    @returns:
+        None
+    '''
+    newfile = '.'.join(PATH.split('.')[:-1]) + '_'+name+'.' + PATH.split('.')[-1]
+
+    if imgs != None:
+        # Create side-by-side comparison and write
+        result = np.hstack(imgs)
+        cv.imwrite(newfile,result)
+    else:
+        cv.imwrite(newfile, img)
+
+
+def init(img):
+    sobelx = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) #sobelx
+    sobely = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]]) #sobely
+
+    gx = ritconv(img,sobelx)
+    gy = ritconv(img,sobely)
+
+    gradient = np.sqrt(gx.astype(np.float32)**2 + gy.astype(np.float32)**2)
+    theta = np.arctan2(gy,gx)
+    thetaQ = (np.round(theta * (5.0 / np.pi)) + 5) % 5
+
+    return [gradient, thetaQ]
 
 
 def main():
-    if (len(sys.arv) < 2):
-        print('Need target directory')
+    '''
+    Main function handling input, output and the program's operation flow
+    @params:
+        None
+    @returns:
+        None
+    '''
+    if (len(sys.argv) < 2):
+        print('Need target image')
         sys.exit()
     path = sys.argv[1]
 
     if not os.path.isdir(path) and path.split('.')[1].lower() in EXTENSIONS:
         global PATH
         PATH = path
+
         img = cv.imread(path, cv.IMREAD_GRAYSCALE)
-        kernel = init_kernel([.25,.5,.25])
-        blur = cv.GaussianBlur(img,(5,5),0)
-        ret,th = cv.threshold(blur,0,255,cv.THRESH_BINARY+cv.THRESH_OTSU)
+        write_result(None,img,'original')
+        #gb_img = cv.GaussianBlur(img,(5,5),0)
+        #grad,theta = init(gb_img)
 
-        plt.imshow(ret,'ret')
-        plt.imshow(th,'th')
-        plt.show()
+        #thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+        #thresh = cv.adaptiveThreshold(gb_img, 255, \
+        #            cv.ADAPTIVE_THRESH_GAUSSIAN_C, \
+        #            cv.THRESH_BINARY_INV,11,1)
 
-        #TODO Implement algorithm
+        #write_result([img,gb_img,thresh],None,'progression')
+        print('Cool')
+
+        #plt.imshow(ret,'ret')
+        #plt.imshow(th,'th')
+        #plt.show()
 
         #threshold( gray, thr, 100,255,THRESH_BINARY ); Greyscale -> binary
+
+
+main()
