@@ -1,10 +1,10 @@
-import pdb
 import cv2 as cv
 import numpy as np
 from matplotlib import pyplot as plt
 import sys
 import os
 import math
+from scipy.signal import convolve2d
 
 PATH = 'images/'
 
@@ -57,8 +57,8 @@ def init(img):
     sobelx = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) #sobelx
     sobely = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]]) #sobely
 
-    gx = ritconv(img,sobelx)
-    gy = ritconv(img,sobely)
+    gx = convolve2d(img,sobelx)
+    gy = convolve2d(img,sobely)
 
     gradient = np.sqrt(gx.astype(np.float32)**2 + gy.astype(np.float32)**2)
     theta = np.arctan2(gy,gx)
@@ -85,17 +85,17 @@ def main():
         PATH = path
 
         img = cv.imread(path, cv.IMREAD_GRAYSCALE)
-        write_result(None,img,'original')
-        #gb_img = cv.GaussianBlur(img,(5,5),0)
-        #grad,theta = init(gb_img)
+        gb_img = cv.GaussianBlur(img,(5,5),0)
+        grad,theta = init(gb_img)
 
         #thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
-        #thresh = cv.adaptiveThreshold(gb_img, 255, \
-        #            cv.ADAPTIVE_THRESH_GAUSSIAN_C, \
-        #            cv.THRESH_BINARY_INV,11,1)
+        thresh = cv.adaptiveThreshold(gb_img, 255, \
+                    cv.ADAPTIVE_THRESH_GAUSSIAN_C, \
+                    cv.THRESH_BINARY_INV,11,1)
+        kernel = np.ones((3,3),np.uint8)
+        erode = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel, iterations=3)
 
-        #write_result([img,gb_img,thresh],None,'progression')
-        print('Cool')
+        write_result([img,gb_img,thresh,erode],None,'progression')
 
         #plt.imshow(ret,'ret')
         #plt.imshow(th,'th')
