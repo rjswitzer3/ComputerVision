@@ -75,6 +75,75 @@ def init(img):
     return [gradient, thetaQ]
 
 
+def cont(gb_img):
+    '''
+    General morphology pipeline to derive contours
+    @params
+        gb_img: image with noise reduction
+    @returns
+        thesh: the threshold image
+        erode: the resulting image from erosion
+    '''
+    thresh = cv.adaptiveThreshold(gb_img, 255, \
+                cv.ADAPTIVE_THRESH_GAUSSIAN_C, \
+                cv.THRESH_BINARY_INV,11,1)
+    kernel = np.ones((3,3),np.uint8)
+    erode = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel, iterations=3)
+
+    cont_img = erode.copy()
+    contours = cv.findContours(cont_img,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE)
+
+    #for c in contours:
+    #    area = cv.contourArea(c)
+    #    if area < 2000 or area > 4000:
+    #        continue
+    #    if len(c)<5:
+    #        di = cv.fitEllipse(c)
+    #        cv.ellipse(img,di,(0,255,0),2)
+
+    return [thresh,erode]
+
+
+def otsu(gb_img):
+    '''
+    Image segmentation using watershed algorithm
+    @params
+        gb_img: image with noise reduction
+    @returns
+
+    '''
+
+    ret,thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+    kernel = np.ones((3,3),np.uint8)
+    o_img = cv.morphologyEx(thresh,cv.MORPH_OPEN,kernel,iterations = 2)
+
+    bg = cv.dilate(o_img,kernel,iterations=3)
+
+    d_transform = cv.distanceTransform(o_img,cv.cv.CV_DIST_L2,5)
+    ret, fg = cv.threshold(d_transform,.7*d_transform.max(),255,0)
+
+    fg = np.uint8(fg)
+    unknown = cv.subtract(bg,fg)
+    write_result([gb_img,thresh,o_img,d_transform,unknown],None,'otsu')
+
+
+def dice(gb_img):
+    kernel = np.ones((3,3),np.uint8)
+    r,thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+    can_img = cv.Canny(thresh,100,200)
+
+    #r,can_img = cv.threshold(can_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+
+    h,w = can_img.shape
+    for i in range(w):
+        for j in range(h):
+            if can_img[j][i] != 0:
+                can_img[j][i] = 255
+
+
+    return can_img
+
+
 def main():
     '''
     Main function handling input, output and the program's operation flow
@@ -92,29 +161,20 @@ def main():
         global PATH
         PATH = path
 
+        kernel = init_kernel([.25,.5,.25])
+
         img = cv.imread(path, cv.IMREAD_GRAYSCALE)
         gb_img = cv.GaussianBlur(img,(5,5),0)
+
         grad,theta = init(gb_img)
+        t_img,e_img = cont(gb_img) # TESTING
+        otsu(gb_img) # TESTING
 
-        #threshT = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
-        thresh = cv.adaptiveThreshold(gb_img, 255, \
-                    cv.ADAPTIVE_THRESH_GAUSSIAN_C, \
-                    cv.THRESH_BINARY_INV,11,1)
-        kernel = np.ones((3,3),np.uint8)
-        erode = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel, iterations=3)
+        c_img = dice(gb_img)
 
-        cont_img = erode.copy()
-        contours = cv.findContours(cont_img,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE)
 
-        #for c in contours:
-        #    area = cv.contourArea(c)
-        #    if area < 2000 or area > 4000:
-        #        continue
-        #    if len(c)<5:
-        #        di = cv.fitEllipse(c)
-        #        cv.ellipse(img,di,(0,255,0),2)
 
-        write_result([img,gb_img,thresh,erode],None,'progression')
+        write_result([img,gb_img,t_img,e_img,c_img],None,'progression')
 
         #threshold( gray, thr, 100,255,THRESH_BINARY ); Greyscale -> binary
 
