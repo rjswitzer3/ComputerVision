@@ -13,6 +13,11 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','jpx','j2k','j2c','fpx', \
                   'pcd','pdf','png','ppm','webp','bmp','bpg','dib','wav', \
                   'cgm','svg','gif'])
 
+def output_result():
+    print('INPUT Filename\t\t'+PATH.split('/')[1])
+    print('Number of Dice:\t\t')
+    print('Number of 1\'s:\t\t')
+
 
 def init_kernel(values):
     '''
@@ -119,7 +124,7 @@ def otsu(gb_img):
 
     bg = cv.dilate(o_img,kernel,iterations=3)
 
-    d_transform = cv.distanceTransform(o_img,cv.cv.CV_DIST_L2,5)
+    d_transform = cv.distanceTransform(o_img,cv.DIST_L2,5) #cv.cv.CV_DIST_L2
     ret, fg = cv.threshold(d_transform,.7*d_transform.max(),255,0)
 
     fg = np.uint8(fg)
@@ -132,14 +137,27 @@ def dice(gb_img):
     r,thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
     can_img = cv.Canny(thresh,100,200)
 
-    #r,can_img = cv.threshold(can_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+    r,can_img = cv.threshold(can_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+    img,cons,hier = cv.findContours(can_img,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE)
 
-    h,w = can_img.shape
-    for i in range(w):
-        for j in range(h):
-            if can_img[j][i] != 0:
-                can_img[j][i] = 255
+    area = 0
+    roi = gb_img.copy()
+    for c in cons:
+        area = cv.contourArea(c)
+        if (area > 2000) or (area < 3500):
+            #print(area)
+            rec = cv.minAreaRect(c)
+            print(rec)
+            box = cv.boxPoints(rec)
+            box = np.int0(box)
+            roi = cv.drawContours(roi,[box],0,(0,0,255),10)
+            #rec = cv.boundingRect(c)
+            #x,y,w,h = rec
+            #roi = cv.rectangle(roi,(x,y),(x+w,y+h),(0,255,0),5)
 
+
+
+    write_result([gb_img,can_img,roi],None,'output')
 
     return can_img
 
@@ -167,14 +185,15 @@ def main():
         gb_img = cv.GaussianBlur(img,(5,5),0)
 
         grad,theta = init(gb_img)
-        t_img,e_img = cont(gb_img) # TESTING
-        otsu(gb_img) # TESTING
+
+        #t_img,e_img = cont(gb_img) # TESTING
+        #otsu(gb_img)               # TESTING
 
         c_img = dice(gb_img)
 
 
 
-        write_result([img,gb_img,t_img,e_img,c_img],None,'progression')
+        #write_result([img,gb_img,t_img,e_img,c_img],None,'progression')
 
         #threshold( gray, thr, 100,255,THRESH_BINARY ); Greyscale -> binary
 
