@@ -13,7 +13,7 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','jpx','j2k','j2c','fpx', \
                   'pcd','pdf','png','ppm','webp','bmp','bpg','dib','wav', \
                   'cgm','svg','gif'])
 
-def output_result():
+def output_result(dice):
     print('INPUT Filename\t\t'+PATH.split('/')[1])
     print('Number of Dice:\t\t')
     print('Number of 1\'s:\t\t')
@@ -80,86 +80,94 @@ def init(img):
     return [gradient, thetaQ]
 
 
-def cont(gb_img):
-    '''
-    General morphology pipeline to derive contours
-    @params
-        gb_img: image with noise reduction
-    @returns
-        thesh: the threshold image
-        erode: the resulting image from erosion
-    '''
-    thresh = cv.adaptiveThreshold(gb_img, 255, \
-                cv.ADAPTIVE_THRESH_GAUSSIAN_C, \
-                cv.THRESH_BINARY_INV,11,1)
+def init_detector():
+    params = cv.SimpleBlobDetector_Params()
+    params.filterByInertia = True
+    params.minInertiaRatio = .6
+    params.filterByConvexity = True
+    params.minConvexity = .5
+
+    v = (cv.__version__).split('.')
+    if int(v[0]) < 3:
+        return cv.SimpleBlobDetector(params)
+    else:
+        return cv.SimpleBlobDetector_create(params)
+
+
+def sand(gb_img):
     kernel = np.ones((3,3),np.uint8)
-    erode = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel, iterations=3)
 
-    cont_img = erode.copy()
-    contours = cv.findContours(cont_img,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE)
-
-    #for c in contours:
-    #    area = cv.contourArea(c)
-    #    if area < 2000 or area > 4000:
-    #        continue
-    #    if len(c)<5:
-    #        di = cv.fitEllipse(c)
-    #        cv.ellipse(img,di,(0,255,0),2)
-
-    return [thresh,erode]
+    r,thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    open = cv.morphologyEx(thresh, cv.MORPH_OPEN, kernel, iterations = 8)
+    can_img = cv.Canny(open,200,330)
 
 
-def otsu(gb_img):
+def decipher_dice(gb_img):
     '''
-    Image segmentation using watershed algorithm
-    @params
-        gb_img: image with noise reduction
-    @returns
-
+    MAIN PIPELINE FOR COUNTING DICE
     '''
-
-    ret,thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+    dice = []
+    area = 0
+    connectivity = 4
+    roi = gb_img.copy()
     kernel = np.ones((3,3),np.uint8)
-    o_img = cv.morphologyEx(thresh,cv.MORPH_OPEN,kernel,iterations = 2)
 
-    bg = cv.dilate(o_img,kernel,iterations=3)
+    r,thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    cc = cv.connectedComponentsWithStats(thresh, connectivity, cv.CV_32S) #TODO
+    open = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel, iterations = 23)
+    can_img = cv.Canny(open,200,330)
 
-    d_transform = cv.distanceTransform(o_img,cv.DIST_L2,5) #cv.cv.CV_DIST_L2
-    ret, fg = cv.threshold(d_transform,.7*d_transform.max(),255,0)
-
-    fg = np.uint8(fg)
-    unknown = cv.subtract(bg,fg)
-    write_result([gb_img,thresh,o_img,d_transform,unknown],None,'otsu')
-
-
-def dice(gb_img):
-    kernel = np.ones((3,3),np.uint8)
-    r,thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
-    can_img = cv.Canny(thresh,100,200)
-
-    r,can_img = cv.threshold(can_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
     img,cons,hier = cv.findContours(can_img,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE)
 
-    area = 0
-    roi = gb_img.copy()
     for c in cons:
         area = cv.contourArea(c)
         if (area > 2000) or (area < 3500):
-            #print(area)
             rec = cv.minAreaRect(c)
-            print(rec)
             box = cv.boxPoints(rec)
             box = np.int0(box)
             roi = cv.drawContours(roi,[box],0,(0,0,255),10)
-            #rec = cv.boundingRect(c)
-            #x,y,w,h = rec
-            #roi = cv.rectangle(roi,(x,y),(x+w,y+h),(0,255,0),5)
+
+            rect = cv.boundingRect(c)
+            x,y,w,h = rect
+            if h>100 and w>100: #Super Hacky TODO Find sophisticated solution
+                dice.append(gb_img[y:y+h,x:x+w])
+
+    write_result([thresh,open,can_img,roi],None,'output')
+
+    return dice
+
+
+def count_pips(gb_img,dice_imgs):
+    dice = { 1 : 0, 2 : 0, 3 : 0, 4 : 0, 5 : 0, 6 : 0, 'total': 0, 'count': len(dice_imgs) }
+    kernel = np.ones((3,3),np.uint8)
+    detector = init_detector()
+    #r,thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+    i = 0
+    for di in dice_imgs:
+        r,thresh = cv.threshold(di, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+        #di_fill = cv.morphologyEx(thresh, cv.MORPH_DILATE, kernel, iterations = 3)
+
+        di_fill = thresh.copy()
+        h,w = di_fill.shape[:2]
+        mask = np.zeros((h+2,w+2), np.uint8)
+
+        cv.floodFill(di_fill,mask,(0,0),255)
+        cv.floodFill(di_fill,mask,(0,h-1),255)
+        cv.floodFill(di_fill,mask,(w-1,0),255)
+        cv.floodFill(di_fill,mask,(w-1,h-1),255)
+
+        pips = thresh | di_fill
+        #pips = cv.morp
+
+        blobs = detector.detect(pips)
+
+        write_result(None,pips,'di-'+str(i)+'-val'+str(len(blobs)))
+        i += 1
 
 
 
-    write_result([gb_img,can_img,roi],None,'output')
+    return dice
 
-    return can_img
 
 
 def main():
@@ -186,16 +194,10 @@ def main():
 
         grad,theta = init(gb_img)
 
-        #t_img,e_img = cont(gb_img) # TESTING
-        #otsu(gb_img)               # TESTING
-
-        c_img = dice(gb_img)
+        dice_imgs = decipher_dice(gb_img)
+        #dice_vals = count_pips(gb_img,dice_imgs)
 
 
-
-        #write_result([img,gb_img,t_img,e_img,c_img],None,'progression')
-
-        #threshold( gray, thr, 100,255,THRESH_BINARY ); Greyscale -> binary
 
 
 main()
