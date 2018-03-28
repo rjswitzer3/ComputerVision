@@ -178,7 +178,7 @@ def decipher_dice(gb_img):
     return dice
 
 
-def count_pips(gb_img,dice_imgs):
+def count_pips(dice_imgs):
     '''
     For each di image derived, count the number of pips (i.e. its face value)
     @params:
@@ -190,12 +190,10 @@ def count_pips(gb_img,dice_imgs):
             'unknown': 0, 'total_sum': 0, 'count': 0 }
     kernel = np.ones((3,3),np.uint8)
     detector = init_detector()
-    #r,thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
 
     i = 0
     for di in dice_imgs:
         r,thresh = cv.threshold(di, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
-        #di_fill = cv.morphologyEx(thresh, cv.MORPH_DILATE, kernel, iterations = 3)
 
         di_fill = thresh.copy()
         h,w = di_fill.shape[:2]
@@ -210,13 +208,11 @@ def count_pips(gb_img,dice_imgs):
         pips = cv.morphologyEx(pips, cv.MORPH_DILATE, kernel, iterations = 5)
         pips = cv.morphologyEx(pips, cv.MORPH_ERODE, kernel, iterations = 10)
 
-        blobs = detector.detect(pips)
+        keys = detector.detect(pips)
 
         #write_result(None,pips,'di-'+str(i)+'-val'+str(len(blobs)))
         i += 1
-        dice = allocate_dice(dice,blobs)
-
-
+        dice = allocate_dice(dice,keys)
 
     return dice
 
@@ -246,7 +242,7 @@ def main():
         grad,theta = init(gb_img)# TODO remove if unused
 
         dice_imgs = decipher_dice(gb_img)
-        dice = count_pips(gb_img,dice_imgs)
+        dice = count_pips(dice_imgs)
         output_result(dice)
 
 
