@@ -14,6 +14,13 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','jpx','j2k','j2c','fpx', \
                   'cgm','svg','gif'])
 
 def output_result(dice):
+    '''
+    Write out to the console the results of the processing for the given image.
+    @params:
+        dice: dictionary encapsulating all pertient dice information for the image
+    @returns:
+        None
+    '''
     print('INPUT Filename\t\t'+PATH.split('/')[1])
     print('Number of Dice:\t\t'+str(dice['count']))
     print('Number of 1\'s:\t\t'+str(dice[1]))
@@ -24,6 +31,26 @@ def output_result(dice):
     print('Number of 6\'s:\t\t'+str(dice[6]))
     print('Number of Unknown:\t'+str(dice['unknown']))
     print('Total of all dots:\t'+str(dice['total_sum']))
+
+
+def write_result(imgs,img,name):
+    '''
+    Write the images resulting from transformations and morphology
+    @params:
+        imgs: list of all images
+        img: the resultant image post manipulation
+        name: the name descriptor for the image
+    @returns:
+        None
+    '''
+    newfile = '.'.join(PATH.split('.')[:-1]) + '_'+name+'.' + PATH.split('.')[-1]
+
+    if imgs != None:
+        # Create side-by-side comparison and write
+        result = np.hstack(imgs)
+        cv.imwrite(newfile,result)
+    else:
+        cv.imwrite(newfile, img)
 
 
 def init_kernel(values):
@@ -43,26 +70,6 @@ def init_kernel(values):
             kernel[i][j] = ki[i] * kj[j]
 
     return kernel
-
-
-def write_result(imgs,img,name):
-    '''
-    Write the results of the canny edge detection
-    @params:
-        imgs: list of all images
-        img: the resultant image post manipulation
-        name: the name descriptor for the image
-    @returns:
-        None
-    '''
-    newfile = '.'.join(PATH.split('.')[:-1]) + '_'+name+'.' + PATH.split('.')[-1]
-
-    if imgs != None:
-        # Create side-by-side comparison and write
-        result = np.hstack(imgs)
-        cv.imwrite(newfile,result)
-    else:
-        cv.imwrite(newfile, img)
 
 
 def init(img):
@@ -88,6 +95,13 @@ def init(img):
 
 
 def init_detector():
+    '''
+    Initialize and define a blob detector with custom parameters
+    @params
+        none
+    @returns
+        SimpleBlobDetector: SimpleBlobDetector with custom parameters
+    '''
     params = cv.SimpleBlobDetector_Params()
     params.filterByInertia = True
     params.minInertiaRatio = .6
@@ -103,11 +117,21 @@ def init_detector():
         return cv.SimpleBlobDetector_create(params)
 
 
-def allocate_dice(dice,blobs):
-    if len(blobs) > 0 and len(blobs) < 7:
-        dice[len(blobs)] += 1
+def allocate_dice(dice,keys):
+    '''
+    Allocate and increment the data in the dice dictionary according
+    to the keys provided.
+    @params:
+        dice: dictionary encapsulating all pertient dice information for the image
+        keys: key matches found in the image from the blob detector
+    @returns:
+        dice: updated dictionary encapsulating all pertient dice information
+              for the image
+    '''
+    if len(keys) > 0 and len(keys) < 7:
+        dice[len(keys)] += 1
         dice['count'] += 1
-        dice['total_sum'] += len(blobs)
+        dice['total_sum'] += len(keys)
     else:
         dice['unknown'] += 1
         print('Pip deciphering error')
@@ -116,7 +140,11 @@ def allocate_dice(dice,blobs):
 
 def decipher_dice(gb_img):
     '''
-    MAIN PIPELINE FOR COUNTING DICE
+    Main pipeline for deciphering dice in the image provide.
+    @params:
+        gb_img: input image with noise reduction
+    @returns:
+        dice: array of dice images derived from the input image
     '''
     dice = []
     area = 0
@@ -151,6 +179,13 @@ def decipher_dice(gb_img):
 
 
 def count_pips(gb_img,dice_imgs):
+    '''
+    For each di image derived, count the number of pips (i.e. its face value)
+    @params:
+        dice_imgs: array of dice images derived from the input image
+    @returns:
+        dice: dictionary encapsulating all pertient dice information for the image
+    '''
     dice = { 1 : 0, 2 : 0, 3 : 0, 4 : 0, 5 : 0, 6 : 0, \
             'unknown': 0, 'total_sum': 0, 'count': 0 }
     kernel = np.ones((3,3),np.uint8)
@@ -208,7 +243,7 @@ def main():
         img = cv.imread(path, cv.IMREAD_GRAYSCALE)
         gb_img = cv.GaussianBlur(img,(5,5),0)
 
-        grad,theta = init(gb_img)
+        grad,theta = init(gb_img)# TODO remove if unused
 
         dice_imgs = decipher_dice(gb_img)
         dice = count_pips(gb_img,dice_imgs)
