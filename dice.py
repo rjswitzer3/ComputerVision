@@ -15,8 +15,15 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','jpx','j2k','j2c','fpx', \
 
 def output_result(dice):
     print('INPUT Filename\t\t'+PATH.split('/')[1])
-    print('Number of Dice:\t\t')
-    print('Number of 1\'s:\t\t')
+    print('Number of Dice:\t\t'+str(dice['count']))
+    print('Number of 1\'s:\t\t'+str(dice[1]))
+    print('Number of 2\'s:\t\t'+str(dice[2]))
+    print('Number of 3\'s:\t\t'+str(dice[3]))
+    print('Number of 4\'s:\t\t'+str(dice[4]))
+    print('Number of 5\'s:\t\t'+str(dice[5]))
+    print('Number of 6\'s:\t\t'+str(dice[6]))
+    print('Number of Unknown:\t'+str(dice['unknown']))
+    print('Total of all dots:\t'+str(dice['total_sum']))
 
 
 def init_kernel(values):
@@ -86,6 +93,8 @@ def init_detector():
     params.minInertiaRatio = .6
     params.filterByConvexity = True
     params.minConvexity = .5
+    params.filterByCircularity = True
+    params.minCircularity = .2
 
     v = (cv.__version__).split('.')
     if int(v[0]) < 3:
@@ -94,12 +103,15 @@ def init_detector():
         return cv.SimpleBlobDetector_create(params)
 
 
-def sand(gb_img):
-    kernel = np.ones((3,3),np.uint8)
-
-    r,thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-    open = cv.morphologyEx(thresh, cv.MORPH_OPEN, kernel, iterations = 8)
-    can_img = cv.Canny(open,200,330)
+def allocate_dice(dice,blobs):
+    if len(blobs) > 0 and len(blobs) < 7:
+        dice[len(blobs)] += 1
+        dice['count'] += 1
+        dice['total_sum'] += len(blobs)
+    else:
+        dice['unknown'] += 1
+        print('Pip deciphering error')
+    return dice
 
 
 def decipher_dice(gb_img):
@@ -114,8 +126,9 @@ def decipher_dice(gb_img):
 
     r,thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
     cc = cv.connectedComponentsWithStats(thresh, connectivity, cv.CV_32S) #TODO
-    open = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel, iterations = 23)
-    can_img = cv.Canny(open,200,330)
+    print(cc)
+    close = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel, iterations = 23)
+    can_img = cv.Canny(close,200,330)
 
     img,cons,hier = cv.findContours(can_img,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE)
 
@@ -132,16 +145,18 @@ def decipher_dice(gb_img):
             if h>100 and w>100: #Super Hacky TODO Find sophisticated solution
                 dice.append(gb_img[y:y+h,x:x+w])
 
-    write_result([thresh,open,can_img,roi],None,'output')
+    write_result([thresh,close,can_img,roi],None,'output')
 
     return dice
 
 
 def count_pips(gb_img,dice_imgs):
-    dice = { 1 : 0, 2 : 0, 3 : 0, 4 : 0, 5 : 0, 6 : 0, 'total': 0, 'count': len(dice_imgs) }
+    dice = { 1 : 0, 2 : 0, 3 : 0, 4 : 0, 5 : 0, 6 : 0, \
+            'unknown': 0, 'total_sum': 0, 'count': 0 }
     kernel = np.ones((3,3),np.uint8)
     detector = init_detector()
     #r,thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+
     i = 0
     for di in dice_imgs:
         r,thresh = cv.threshold(di, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
@@ -157,17 +172,18 @@ def count_pips(gb_img,dice_imgs):
         cv.floodFill(di_fill,mask,(w-1,h-1),255)
 
         pips = thresh | di_fill
-        #pips = cv.morp
+        pips = cv.morphologyEx(pips, cv.MORPH_DILATE, kernel, iterations = 5)
+        pips = cv.morphologyEx(pips, cv.MORPH_ERODE, kernel, iterations = 10)
 
         blobs = detector.detect(pips)
 
-        write_result(None,pips,'di-'+str(i)+'-val'+str(len(blobs)))
+        #write_result(None,pips,'di-'+str(i)+'-val'+str(len(blobs)))
         i += 1
+        dice = allocate_dice(dice,blobs)
 
 
 
     return dice
-
 
 
 def main():
@@ -195,7 +211,8 @@ def main():
         grad,theta = init(gb_img)
 
         dice_imgs = decipher_dice(gb_img)
-        #dice_vals = count_pips(gb_img,dice_imgs)
+        dice = count_pips(gb_img,dice_imgs)
+        output_result(dice)
 
 
 
