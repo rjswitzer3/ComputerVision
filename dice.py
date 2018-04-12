@@ -1,3 +1,11 @@
+'''
+@Author:  Ryan Switzer
+
+Basic straightforward image processing pipeline implementation for recognizing,
+counting, and suming dice values written in python using OpenCV. Results of the
+processing shall be written to the console, and unknown images will be displayed
+in a seperate window during processing for debugging purposes.
+'''
 import cv2 as cv
 import numpy as np
 from matplotlib import pyplot as plt
@@ -6,12 +14,14 @@ import os
 import math
 from scipy.signal import convolve2d
 
-PATH = 'images/'
 
 #Set of accepted image formats
 EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','jpx','j2k','j2c','fpx', \
                   'pcd','pdf','png','ppm','webp','bmp','bpg','dib','wav', \
                   'cgm','svg','gif'])
+#Path where the image shall exist
+PATH = 'images/'
+
 
 def output_result(dice):
     '''
@@ -53,47 +63,6 @@ def write_result(imgs,img,name):
         cv.imwrite(newfile, img)
 
 
-def init_kernel(values):
-    '''
-    Initialize a kernel with the given values
-    @params:
-        values: array of values to be used to establish the kernel
-    @return:
-        kernel: kernel with dimensions (M x M) where M = length of values
-    '''
-    kernel = np.empty([len(values),len(values)])
-    ki = values
-    kj = values
-
-    for i in range(len(values)):
-        for j in range(len(values)):
-            kernel[i][j] = ki[i] * kj[j]
-
-    return kernel
-
-
-def init(img):
-    '''
-    Derive pertinent gradient information from the designated image
-    @params:
-        conv: image with noise reduction
-    @returns:
-        gradient: matrix containing the gradient magnitudes as floats
-        thetaQ: matrix containing the gradient angles (quantized)
-    '''
-    sobelx = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]) #sobelx
-    sobely = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]]) #sobely
-
-    gx = convolve2d(img,sobelx)
-    gy = convolve2d(img,sobely)
-
-    gradient = np.sqrt(gx.astype(np.float32)**2 + gy.astype(np.float32)**2)
-    theta = np.arctan2(gy,gx)
-    thetaQ = (np.round(theta * (5.0 / np.pi)) + 5) % 5
-
-    return [gradient, thetaQ]
-
-
 def init_detector():
     '''
     Initialize and define a blob detector with custom parameters
@@ -117,10 +86,11 @@ def init_detector():
         return cv.SimpleBlobDetector_create(params)
 
 
-def allocate_dice(dice,keys):
+def allocate_dice(dice,keys,di,roi):
     '''
     Allocate and increment the data in the dice dictionary according
-    to the keys provided.
+    to the keys provided. If unknown a window showing the die image and the
+    bounded original image will be shown for debugging
     @params:
         dice: dictionary encapsulating all pertient dice information for the image
         keys: key matches found in the image from the blob detector
@@ -134,11 +104,14 @@ def allocate_dice(dice,keys):
         dice['total_sum'] += len(keys)
     else:
         dice['unknown'] += 1
-        print('Pip deciphering error')
+        plt.imshow(roi)
+        plt.show()
+        plt.imshow(di, cmap='Greys',  interpolation='nearest')
+        plt.show()
     return dice
 
 
-def decipher_dice(gb_img):
+def decipher_dice(img,gb_img):
     '''
     Main pipeline for deciphering dice in the image provide.
     @params:
@@ -149,12 +122,10 @@ def decipher_dice(gb_img):
     dice = []
     area = 0
     connectivity = 4
-    roi = gb_img.copy()
+    roi = img.copy()
     kernel = np.ones((3,3),np.uint8)
 
     r,thresh = cv.threshold(gb_img, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-    cc = cv.connectedComponentsWithStats(thresh, connectivity, cv.CV_32S) #TODO
-    print(cc)
     close = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel, iterations = 23)
     can_img = cv.Canny(close,200,330)
 
@@ -166,19 +137,17 @@ def decipher_dice(gb_img):
             rec = cv.minAreaRect(c)
             box = cv.boxPoints(rec)
             box = np.int0(box)
-            roi = cv.drawContours(roi,[box],0,(0,0,255),10)
+            roi = cv.drawContours(roi,[box],0,(255,0,0),10)
 
             rect = cv.boundingRect(c)
             x,y,w,h = rect
-            if h>100 and w>100: #Super Hacky TODO Find sophisticated solution
+            if h>100 and w>100: #Hacks TODO remove
                 dice.append(gb_img[y:y+h,x:x+w])
 
-    write_result([thresh,close,can_img,roi],None,'output')
-
-    return dice
+    return [dice,roi]
 
 
-def count_pips(dice_imgs):
+def count_pips(dice_imgs,roi):
     '''
     For each di image derived, count the number of pips (i.e. its face value)
     @params:
@@ -191,7 +160,6 @@ def count_pips(dice_imgs):
     kernel = np.ones((3,3),np.uint8)
     detector = init_detector()
 
-    i = 0
     for di in dice_imgs:
         r,thresh = cv.threshold(di, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
 
@@ -210,9 +178,8 @@ def count_pips(dice_imgs):
 
         keys = detector.detect(pips)
 
-        #write_result(None,pips,'di-'+str(i)+'-val'+str(len(blobs)))
-        i += 1
-        dice = allocate_dice(dice,keys)
+        dice = allocate_dice(dice,keys,di,roi)
+
 
     return dice
 
@@ -234,15 +201,12 @@ def main():
         global PATH
         PATH = path
 
-        kernel = init_kernel([.25,.5,.25])
+        img = cv.imread(path, cv.IMREAD_COLOR)
+        g_img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+        gb_img = cv.GaussianBlur(g_img,(5,5),0)
 
-        img = cv.imread(path, cv.IMREAD_GRAYSCALE)
-        gb_img = cv.GaussianBlur(img,(5,5),0)
-
-        grad,theta = init(gb_img)# TODO remove if unused
-
-        dice_imgs = decipher_dice(gb_img)
-        dice = count_pips(dice_imgs)
+        dice_imgs,roi = decipher_dice(img,gb_img)
+        dice = count_pips(dice_imgs,roi)
         output_result(dice)
 
 

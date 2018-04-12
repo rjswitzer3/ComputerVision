@@ -293,8 +293,8 @@ def main():
         edges = ritcan(img,kernel,100,200)
 
         # TESTS for error margin
-        #test_conv(img,kernel)
-        #test_can(img,edges)
+        test_conv(img,kernel)
+        test_can(img,edges)
 
     else:
         print('File format not supported and/or file does not exist')
