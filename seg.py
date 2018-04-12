@@ -19,6 +19,13 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','jpx','j2k','j2c','fpx', \
 PATH = 'images/'
 
 
+def euclidean(a, b, ax=1):
+    '''
+    Calculate the euclidean distance between two points
+    '''
+    return np.linalg.norm(a - b, axis=ax)
+
+
 def loss(orig, xform):
     '''
     Compute the sum squared loss between the original and transformed images
@@ -52,12 +59,23 @@ def kmeans(samples, k):
     Performs k-means on array of N-dimensional Samples
     @params:
         samples: image features
-        k: number of iterations to be performed
+        k: number of clusters
     @returns:
         cluster: array of cluster assignment
     '''
-    #TODO Implement
-    print('Performing Kmeans...')
+    y,x,ch = samples.shape
+    cx = np.random.randint(0, np.max(x)-20, size=k)
+    cy = np.random.randint(0, np.max(y)-20, size=k)
+    cent = np.array(list(zip(cx,cy)))
+
+    cache = np.zeros(cent.shape)
+    clusters = np.zeros()
+    error = euclidean(c,cache,None)
+
+    print(cx,cy)
+    print(cent)
+    print(cent[1][0])
+
 
 
 def main():
@@ -77,4 +95,11 @@ def main():
         global PATH
         PATH = PATH
 
-        img = cv.imread(path, cv.IMREAD_UNCHANGED)
+        img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        kmeans(img, 3)
+    else:
+        print('Error unsupported input - ' + str(path))
+        sys.exit()
+
+
+main()
