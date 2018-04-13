@@ -19,6 +19,26 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','jpx','j2k','j2c','fpx', \
 PATH = 'images/'
 
 
+def write_result(imgs,img,name):
+    '''
+    Write the images resulting from transformations and morphology
+    @params:
+        imgs: list of all images
+        img: the resultant image post manipulation
+        name: the name descriptor for the image
+    @returns:
+        None
+    '''
+    newfile = '.'.join(PATH.split('.')[:-1]) + '_'+name+'.' + PATH.split('.')[-1]
+
+    if imgs != None:
+        # Create side-by-side comparison and write
+        result = np.hstack(imgs)
+        cv.imwrite(newfile,result)
+    else:
+        cv.imwrite(newfile, img)
+
+
 def euclidean(a, b, ax=1):
     '''
     Calculate the euclidean distance between two points
@@ -63,18 +83,34 @@ def kmeans(samples, k):
     @returns:
         cluster: array of cluster assignment
     '''
-    y,x,ch = samples.shape
-    cx = np.random.randint(0, np.max(x)-20, size=k)
-    cy = np.random.randint(0, np.max(y)-20, size=k)
+    #y,x,ch = samples.shape
+    #s = np.array(list(zip(samples)))
+    #s = samples.reshape(-1,2)[:,0]
+    s = samples#.reshape((samples.shape[0]))
+    cx = np.random.randint(0, np.max(s)-20, size=k)
+    cy = np.random.randint(0, np.max(s)-20, size=k)
     cent = np.array(list(zip(cx,cy)))
 
     cache = np.zeros(cent.shape)
-    clusters = np.zeros()
-    error = euclidean(c,cache,None)
+    clusters = np.zeros(len(s))
+    error = euclidean(cent,cache,None)
 
-    print(cx,cy)
-    print(cent)
-    print(cent[1][0])
+    while error != 0:
+        for i in range(len(s)):
+            dist = euclidean(s[i],cent)
+            cluster = np.argmin(dist)
+            clusters[i] = cluster
+        cache = cent
+
+        for i in range(k):
+            pts = [s[j] for j in range(len(s)) if clusters[j] == i]
+            cent[i] = np.mean(pts, axis=0)
+        error = euclidean(cent, cache, None)
+
+
+    #print(cx,cy)
+    #print(cent)
+    #print(cent[1][0])
 
 
 
@@ -94,9 +130,9 @@ def main():
     if not os.path.isdir(path) and path.split('.')[1].lower() in EXTENSIONS:
         global PATH
         PATH = PATH
-
         img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-        kmeans(img, 3)
+        fv = img.reshape((img.shape[0] * img.shape[1],3))
+        kmeans(fv, 3)
     else:
         print('Error unsupported input - ' + str(path))
         sys.exit()
