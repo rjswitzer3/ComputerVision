@@ -21,14 +21,14 @@ PATH = 'images/'
 FEATURES = {'GRY' : [[0,255]], \
             'RGB' : [[0,255],[0,255],[0,255]], \
             'HSV' : [[0,180],[0,255],[0,255]], \
-            'LAB' : [[0,100],[-128,127],[-128,127]]}
+            'LAB' : [[0,150],[-128,127],[-128,127]]}
 #Threshold for acceptably tight cluster centroid
 THRESHOLD = 1.0
 ################################################################
 #Program and Segmentation control parameters
 ################################################################
-K = 11                      #k-value/clusters
-F = 'RGB'                   #Feature usage
+K = 6                      #k-value/clusters
+F = 'HSV'                   #Feature usage
 Z = len(FEATURES[F])        #Channels
 
 
