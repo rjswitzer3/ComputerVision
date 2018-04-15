@@ -215,7 +215,7 @@ def quantize(image, features, k):
     for i in range(len(samples)):
         cmap[i] = centroids[cluster[i]].get_value()
 
-    img = o_reshape(cluster, features, image, False)
+    img = cluster.reshape((image.shape[0],image.shape[1],1))#o_reshape(cluster, features, image, False)
 
     return [img, cmap]
 
