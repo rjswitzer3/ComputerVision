@@ -25,11 +25,10 @@ FEATURES = {'GRY' : [[0,255]], \
 #Threshold for acceptably tight cluster centroid
 THRESHOLD = 1.0
 ################################################################
-#Program and Segmentation control parameters
+#Program and Segmentation parameter flags
 ################################################################
 K = 6                      #k-value/clusters
 F = 'HSV'                   #Feature usage
-Z = len(FEATURES[F])        #Channels
 
 
 class Centroids(object):
@@ -126,26 +125,6 @@ def calc_error(centroids, cache):
     return error
 
 
-def label(pixel, centroids):
-    '''
-    Determine the label for the pixel by calculating the minimum difference to
-    each centroidself.
-    @params:
-        pixel: the pixel value at some position on a sample
-        centroids: list of all centroids
-    @returns:
-        id: the corresponding nearest centroid label
-    '''
-
-    distances = np.zeros(len(centroids))
-    for i in range(len(centroids)):
-        distances[i] = euclidean(pixel,centroids[i].get_value())
-    min = np.min(distances)
-    for c in centroids:
-        if min == euclidean(pixel, c.get_value()):
-            return c.get_id()
-
-
 def euclidean(a, b, ax=1):
     '''
     Calculate the euclidean distance between two points
@@ -167,6 +146,35 @@ def rvectors():
     return rv
 
 
+def o_reshape(arr, feature, image, flat):
+    '''
+    Reshape the array to the designated image dimensions
+    '''
+    if not flat:
+        return arr.reshape((image.shape[0], image.shape[1], len(FEATURES[feature])))
+    else:
+        return arr.reshape((image.shape[0]*image.shape[1], len(FEATURES[feature])))
+
+
+def label(pixel, centroids):
+    '''
+    Determine the label for the pixel by calculating the minimum difference to
+    each centroidself.
+    @params:
+        pixel: the pixel value at some position on a sample
+        centroids: list of all centroids
+    @returns:
+        id: the corresponding nearest centroid label
+    '''
+    distances = np.zeros(len(centroids))
+    for i in range(len(centroids)):
+        distances[i] = euclidean(pixel,centroids[i].get_value())
+    min = np.min(distances)
+    for c in centroids:
+        if min == euclidean(pixel, c.get_value()):
+            return c.get_id()
+
+
 def loss(orig, xform):
     '''
     Compute the sum squared loss between the original and transformed images
@@ -176,10 +184,7 @@ def loss(orig, xform):
     @returns:
         ssl: pixel wise squared sum loss
     '''
-    if F == 'GRY':
-        xform = xform.reshape((orig.shape[0], orig.shape[1]))
-    ssl = ((orig-xform)**2).sum()/len(orig.flatten())
-    return ssl
+    return ((orig-xform)**2).sum()/len(orig.flatten())
 
 
 def quantize(image, features, k):
@@ -202,23 +207,17 @@ def quantize(image, features, k):
         image = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
 
     #Flatten the image & perform kmeans
-    samples = image.reshape((image.shape[0]*image.shape[1], Z))
+    samples = o_reshape(image, features, image, True)
     cluster,centroids = kmeans(samples,k)
-    img = np.zeros(samples.shape)
+    cmap = np.zeros(samples.shape)
 
-    #TODO Refactor to proper structure for assignment
     #Assign centroid intensity value to each pixel in it's cluster
     for i in range(len(samples)):
-        img[i] = centroids[cluster[i]].get_value()
+        cmap[i] = centroids[cluster[i]].get_value()
 
-    #Reshape back to the original image dimensions
-    img = img.reshape((image.shape[0], image.shape[1], Z))
-    img = img.astype(int)
+    img = o_reshape(cluster, features, image, False)
 
-    name = F+'-k'+str(k)
-    write_result(None, img, name)
-    print("SSL: "+str(loss(image, img)))
-
+    return [img, cmap]
 
 
 def kmeans(samples, k):
@@ -231,7 +230,7 @@ def kmeans(samples, k):
         cluster: array of cluster assignment
     '''
     s = samples
-    labels = [None]*len(s)
+    labels = np.zeros(len(s), dtype=int)#[None]*len(s)
     centroids, clusters, cache = ([] for i in range(3))
 
     for i in range(k):
@@ -247,8 +246,10 @@ def kmeans(samples, k):
     #Perform clustering
     while error > THRESHOLD:
         for i in range(len(s)):
-            labels[i] = label(s[i],centroids)
-            clusters[labels[i]].append(s[i])
+            #Map centroid/cluster id to the ith pixel
+            cid = label(s[i],centroids)
+            labels[i] = cid#label(s[i],centroids)
+            clusters[cid].append(s[i])
         cache = [centroids[i].get_value() for i in range(k)]
         for i in range(k):
             centroids[i].update(clusters[i].get_mean())
@@ -256,6 +257,45 @@ def kmeans(samples, k):
         error = calc_error(centroids,cache)
 
     return [labels, centroids]
+
+
+def segmentation(image, features):
+    '''
+    Manages the operational flow for image segmentation
+    '''
+    clusters,img = quantize(image, features, K)
+    #Reshape back to the original image dimensions
+    img = o_reshape(img, features, image, False)
+    img = img.astype(int)
+
+    name = F+'-k'+str(K)
+    write_result(None, img, name)
+    print("SSL: "+str(loss(image, img)))
+
+
+def cli():
+    '''
+    Command Line Interface that handles optional paramaters for execution.
+    Execution options:
+        python seg.py -f -k
+        -f: feature specification [e.g. RGB,HSV,LAB,GRY]
+        -k: number of clusters [e.g. 6]
+    @params:
+        none
+    @returns:
+        None
+    '''
+    if (len(sys.argv) < 2):
+        print('Need target image')
+        sys.exit()
+    if (len(sys.argv) > 2):
+        global F
+        F = sys.argv[2].upper()
+    if (len(sys.argv) > 3):
+        global K
+        K = int(sys.argv[3])
+
+    return sys.argv[1]
 
 
 def main():
@@ -266,17 +306,13 @@ def main():
     @returns:
         None
     '''
-    if (len(sys.argv) < 2):
-        print('Need target image')
-        sys.exit()
-    path = sys.argv[1]
+    path = cli()
 
     if not os.path.isdir(path) and path.split('.')[1].lower() in EXTENSIONS:
         global PATH
         PATH = path
         img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-        quantize(img, F, K)
-
+        segmentation(img, F)
     else:
         print('Error unsupported input - ' + str(path))
         sys.exit()
