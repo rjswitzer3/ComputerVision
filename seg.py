@@ -18,16 +18,37 @@ EXTENSIONS = set(['jpg','jpeg','jif','jfif','jp2','jpx','j2k','j2c','fpx', \
 #Path where the image shall exist
 PATH = 'images/'
 #Set of colorspace features
-FEATURES = {'HSV' : [0,255], 'GRAY' : [0,255]}
-#Threshold for tight cluster centroid
+FEATURES = {'GRY' : [[0,255]], \
+            'RGB' : [[0,255],[0,255],[0,255]], \
+            'HSV' : [[0,359],[0,100],[0,100]], \
+            'LAB' : [[0,150],[-100,100],[-100,100]]}
+#Threshold for acceptably tight cluster centroid
 THRESHOLD = 1.0
+################################################################
+#Program and Segmentation control parameters
+################################################################
+K = 3                       #k-value/clusters
+F = 'LAB'                   #Feature usage
+Z = len(FEATURES[F])        #Channels
+
+
+class Centroids(object):
+    def __init__ (self,centroids):
+        self.centroids = centroids
+    def get_centroids(self):
+        return self.centroids
+
 
 class Centroid(object):
+    '''
+    Object representaion of a centroid. Encapsulates the current value and
+    the label identifier correlating to a cluster
+    '''
     def __init__(self,value,id):
         self.value = value
         self.id = id
     def str(self):
-        return str(self.id)+" - "+str(self.value)
+        return "Centroid:"+str(self.id)+" - "+str(self.value)
     def get_id(self):
         return self.id
     def get_value(self):
@@ -35,7 +56,12 @@ class Centroid(object):
     def update(self,value):
         self.value = value
 
+
 class Cluster(object):
+    '''
+    Object representation of a cluster. Encapsulates all value points relative to
+    a centroid, the corresponding centroid and the mean value of the cluster.
+    '''
     def __init__(self,values,mean,centroid):
         self.values = values
         self.mean = mean
@@ -47,8 +73,15 @@ class Cluster(object):
     def get_values(self):
         return self.values
     def get_mean(self):
-        return np.mean(self.values)
-
+        if len(self.values) > 0: #Extreme edge case
+            if len(self.values[0]) > 1 and isinstance(self.values[0], np.ndarray):
+                return np.array([np.mean(zip(*self.values)[0]),\
+                                np.mean(zip(*self.values)[1]),\
+                                np.mean(zip(*self.values)[2])])
+            else:
+                return np.mean(self.values)
+        else:
+            return 0.0
 
 
 def write_result(imgs,img,name):
@@ -66,21 +99,27 @@ def write_result(imgs,img,name):
     if imgs != None:
         # Create side-by-side comparison and write
         result = np.hstack(imgs)
-        cv.imwrite(newfile,result)
+        cv2.imwrite(newfile, result)
     else:
-        cv.imwrite(newfile, img)
+        cv2.imwrite(newfile, img)
 
 
 def calc_error(centroids, cache):
     '''
     Calculate the average step distance from the prior centroid to the current.
+    @params:
+        centroids: list of centroid objects
+        cache: list of the prior centroid values
+    @returns:
+        error: the difference between the cluster average and the centroid
     '''
-    t_error = 0.0
-    for i in range(len(centroids)):
-        t_error += euclidean(centroids[i].get_value(),cache[i],None)
-    err = t_error/len(centroids)
-    print(err)
-    return err
+    error = 0.0
+    k = len(centroids)
+    for i in range(k):
+        error += euclidean(centroids[i].value, cache[i], None)
+    error = error/k
+    print("Cluster error: "+str(error))
+    return error
 
 
 def label(pixel, centroids):
@@ -110,6 +149,20 @@ def euclidean(a, b, ax=1):
     return np.linalg.norm(a - b)
 
 
+def rvectors():
+    '''
+    Generate random values based on the feature colorspace.
+    @params:
+        none
+    @returns:
+        rv: random channel / intensity values
+    '''
+    rv = np.empty(shape=0)
+    for f in FEATURES[F]:
+        rv = np.append(rv, np.random.randint(f[0],f[1]))
+    return rv
+
+
 def loss(orig, xform):
     '''
     Compute the sum squared loss between the original and transformed images
@@ -117,10 +170,10 @@ def loss(orig, xform):
         orig: the original input image
         xform: the transformed image
     @returns:
-        ss: squared sum loss
+        ssl: squared sum loss
     '''
-    #TODO: Implement
-    print('Calculting loss...')
+    ssl = ((orig-xform)**2).sum()
+    return ssl
 
 
 def quantize(image, features, k):
@@ -134,10 +187,26 @@ def quantize(image, features, k):
         img: 2D array of cluster IDs with same dimensions as the input image
         cmap: array of cluster IDs corresponding cluster IDs to mean intensities
     '''
-    samples = image.flatten() #TODO - Float32
-    #s = image.reshape((image.shape[0]*image.shape[1], 1))
+    #Conditions based on features
+    if features == 'GRY':
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    elif features == 'HSV':
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+    elif features == 'LAB':
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
 
-    clusters = kmeans(samples,k)
+    samples = image.reshape((image.shape[0]*image.shape[1], Z))
+    cluster,centroids = kmeans(samples,k)
+    img = np.zeros(samples.shape)
+
+    for i in range(len(samples)):
+        img[i] = centroids[cluster[i]].get_value()
+
+    img = img.reshape((image.shape[0], image.shape[1], Z))
+    img = img.astype(int)
+
+    name = F+'-k'+str(k)
+    write_result(None, img, name)
 
 
 
@@ -152,10 +221,11 @@ def kmeans(samples, k):
     '''
     s = samples
     labels = [None]*len(s)
-    centroids, clusters, cache = ([] for i in range(3)) # values change based on colorsapce
+    centroids, clusters, cache = ([] for i in range(3))
 
     for i in range(k):
-        c = Centroid(np.random.randint(0,255),i)
+        v =rvectors()
+        c = Centroid(v,i)
         centroids.append(c)
         clusters.append(Cluster([],0.0,c))
         cache.append(0.0)
@@ -167,15 +237,13 @@ def kmeans(samples, k):
         for i in range(len(s)):
             labels[i] = label(s[i],centroids)
             clusters[labels[i]].append(s[i])
-        #for i in range(k):
-        #    cache[i] = centroids[i].get_value()
         cache = [centroids[i].get_value() for i in range(k)]
         for i in range(k):
             centroids[i].update(clusters[i].get_mean())
             clusters[i] = Cluster([],0.0,centroids[i])
         error = calc_error(centroids,cache)
 
-    return labels
+    return [labels, centroids]
 
 
 def main():
@@ -193,10 +261,9 @@ def main():
 
     if not os.path.isdir(path) and path.split('.')[1].lower() in EXTENSIONS:
         global PATH
-        PATH = PATH
+        PATH = path
         img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-        #fv = img.reshape((img.shape[0] * img.shape[1],3))
-        quantize(img, '', 3)
+        quantize(img, F, K)
 
     else:
         print('Error unsupported input - ' + str(path))
