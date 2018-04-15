@@ -20,15 +20,15 @@ PATH = 'images/'
 #Set of colorspace features
 FEATURES = {'GRY' : [[0,255]], \
             'RGB' : [[0,255],[0,255],[0,255]], \
-            'HSV' : [[0,359],[0,100],[0,100]], \
-            'LAB' : [[0,150],[-100,100],[-100,100]]}
+            'HSV' : [[0,180],[0,255],[0,255]], \
+            'LAB' : [[0,100],[-128,127],[-128,127]]}
 #Threshold for acceptably tight cluster centroid
 THRESHOLD = 1.0
 ################################################################
 #Program and Segmentation control parameters
 ################################################################
-K = 3                       #k-value/clusters
-F = 'LAB'                   #Feature usage
+K = 11                      #k-value/clusters
+F = 'RGB'                   #Feature usage
 Z = len(FEATURES[F])        #Channels
 
 
@@ -37,6 +37,10 @@ class Centroids(object):
         self.centroids = centroids
     def get_centroids(self):
         return self.centroids
+    def update_all(self,centroids):
+        self.centroids = centroids
+    def update_one(self,centroid,i):
+        self.centroids[i] = centroid
 
 
 class Centroid(object):
@@ -118,7 +122,7 @@ def calc_error(centroids, cache):
     for i in range(k):
         error += euclidean(centroids[i].value, cache[i], None)
     error = error/k
-    print("Cluster error: "+str(error))
+    print("Cluster error: "+str(error))                 #TESTING TODO REMOVE
     return error
 
 
@@ -170,9 +174,11 @@ def loss(orig, xform):
         orig: the original input image
         xform: the transformed image
     @returns:
-        ssl: squared sum loss
+        ssl: pixel wise squared sum loss
     '''
-    ssl = ((orig-xform)**2).sum()
+    if F == 'GRY':
+        xform = xform.reshape((orig.shape[0], orig.shape[1]))
+    ssl = ((orig-xform)**2).sum()/len(orig.flatten())
     return ssl
 
 
@@ -195,18 +201,23 @@ def quantize(image, features, k):
     elif features == 'LAB':
         image = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
 
+    #Flatten the image & perform kmeans
     samples = image.reshape((image.shape[0]*image.shape[1], Z))
     cluster,centroids = kmeans(samples,k)
     img = np.zeros(samples.shape)
 
+    #TODO Refactor to proper structure for assignment
+    #Assign centroid intensity value to each pixel in it's cluster
     for i in range(len(samples)):
         img[i] = centroids[cluster[i]].get_value()
 
+    #Reshape back to the original image dimensions
     img = img.reshape((image.shape[0], image.shape[1], Z))
     img = img.astype(int)
 
     name = F+'-k'+str(k)
     write_result(None, img, name)
+    print("SSL: "+str(loss(image, img)))
 
 
 
@@ -229,10 +240,11 @@ def kmeans(samples, k):
         centroids.append(c)
         clusters.append(Cluster([],0.0,c))
         cache.append(0.0)
-        print(c.str())
+        print(c.str())                                  #TESTING TODO REMOVE
 
     error = calc_error(centroids,cache)
 
+    #Perform clustering
     while error > THRESHOLD:
         for i in range(len(s)):
             labels[i] = label(s[i],centroids)
