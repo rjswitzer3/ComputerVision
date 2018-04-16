@@ -24,22 +24,13 @@ FEATURES = {'GRY' : [[0,255]], \
             'LAB' : [[0,150],[-128,127],[-128,127]]}
 #Threshold for acceptably tight cluster centroid
 THRESHOLD = 1.0
+#List of all the centroid objects
+CENTROIDS = []
 ################################################################
-#Program and Segmentation parameter flags
+#Parameter flags
 ################################################################
 K = 6                      #k-value/clusters
 F = 'HSV'                   #Feature usage
-
-
-class Centroids(object):
-    def __init__ (self,centroids):
-        self.centroids = centroids
-    def get_centroids(self):
-        return self.centroids
-    def update_all(self,centroids):
-        self.centroids = centroids
-    def update_one(self,centroid,i):
-        self.centroids[i] = centroid
 
 
 class Centroid(object):
@@ -107,27 +98,31 @@ def write_result(imgs,img,name):
         cv2.imwrite(newfile, img)
 
 
-def calc_error(centroids, cache):
+def calc_error(cache):
     '''
     Calculate the average step distance from the prior centroid to the current.
     @params:
-        centroids: list of centroid objects
         cache: list of the prior centroid values
     @returns:
         error: the difference between the cluster average and the centroid
     '''
     error = 0.0
-    k = len(centroids)
-    for i in range(k):
-        error += euclidean(centroids[i].value, cache[i], None)
-    error = error/k
+    for i in range(K):
+        error += euclidean(CENTROIDS[i].get_value(), cache[i], None)
+    error = error/K
     print("Cluster error: "+str(error))                 #TESTING TODO REMOVE
     return error
 
 
 def euclidean(a, b, ax=1):
     '''
-    Calculate the euclidean distance between two points
+    Wrapper for np.linalg.norm() that calculates the euclidean distance between
+    two points
+    @params:
+        a: value one for calculating euclidean distance
+        b: value two for calculating euclidean distance
+    @returns:
+        euclidean_distance: the euclidean distance between the two values
     '''
     return np.linalg.norm(a - b)
 
@@ -138,7 +133,7 @@ def rvectors():
     @params:
         none
     @returns:
-        rv: random channel / intensity values
+        rv: random pixel intensity values
     '''
     rv = np.empty(shape=0)
     for f in FEATURES[F]:
@@ -148,7 +143,15 @@ def rvectors():
 
 def o_reshape(arr, feature, image, flat):
     '''
-    Reshape the array to the designated image dimensions
+    Wrapper for np.reshape() that reshapes the array to the designated depth and
+    image dimensions.
+    @params:
+        arr: the array to Reshape
+        feature: string depicting the feature colorspace used for depth
+        image: the image to reshape to
+        flat: boolean indicating 1D or 2D
+    @returns:
+        arr: the array reshaped according to the parameters
     '''
     if not flat:
         return arr.reshape((image.shape[0], image.shape[1], len(FEATURES[feature])))
@@ -156,23 +159,53 @@ def o_reshape(arr, feature, image, flat):
         return arr.reshape((image.shape[0]*image.shape[1], len(FEATURES[feature])))
 
 
-def label(pixel, centroids):
+def f_convert(image, features, revert):
+    '''
+    Wrapper for cv2.cvtColor() that converts the image to the designated feature
+    colorspace or reverts from back to RGB.
+    @params:
+        image: the image to Convert
+        features: the colorspace to perform conversions to/from
+        revert: boolean flag dictating to/from conversion
+    @returns
+        image: the image converted to the according feature colorspace
+    '''
+    if features == 'GRY':
+        if revert:
+            return cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+        else:
+            return cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    elif features == 'HSV':
+        if revert:
+            return cv2.cvtColor(image, cv2.COLOR_HSV2RGB)
+        else:
+            return cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+    elif features == 'LAB':
+        if revert:
+            return cv2.cvtColor(image, cv2.COLOR_LAB2RGB)
+        else:
+            return cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+    else:
+        return image
+
+
+def label(pixel):
     '''
     Determine the label for the pixel by calculating the minimum difference to
-    each centroidself.
+    each centroid.
     @params:
         pixel: the pixel value at some position on a sample
-        centroids: list of all centroids
     @returns:
         id: the corresponding nearest centroid label
     '''
-    distances = np.zeros(len(centroids))
-    for i in range(len(centroids)):
-        distances[i] = euclidean(pixel,centroids[i].get_value())
+    distances = np.zeros(K)
+    for i in range(K):
+        #Calculate euclidean distance from the pixel to each centroid
+        distances[i] = euclidean(pixel,CENTROIDS[i].get_value())
     min = np.min(distances)
-    for c in centroids:
-        if min == euclidean(pixel, c.get_value()):
-            return c.get_id()
+    for i in range(K):
+        if min == distances[i]:
+            return CENTROIDS[i].get_id()
 
 
 def loss(orig, xform):
@@ -198,24 +231,19 @@ def quantize(image, features, k):
         img: 2D array of cluster IDs with same dimensions as the input image
         cmap: array of cluster IDs corresponding cluster IDs to mean intensities
     '''
-    #Conditions based on features
-    if features == 'GRY':
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    elif features == 'HSV':
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-    elif features == 'LAB':
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+    #Convert the image based on features
+    image = f_convert(image, features, False)
 
     #Flatten the image & perform kmeans
     samples = o_reshape(image, features, image, True)
-    cluster,centroids = kmeans(samples,k)
+    cluster = kmeans(samples,k)
     cmap = np.zeros(samples.shape)
 
     #Assign centroid intensity value to each pixel in it's cluster
     for i in range(len(samples)):
-        cmap[i] = centroids[cluster[i]].get_value()
+        cmap[i] = CENTROIDS[cluster[i]].get_value()
 
-    img = cluster.reshape((image.shape[0],image.shape[1],1))#o_reshape(cluster, features, image, False)
+    img = cluster.reshape((image.shape[0], image.shape[1], 1))
 
     return [img, cmap]
 
@@ -230,33 +258,34 @@ def kmeans(samples, k):
         cluster: array of cluster assignment
     '''
     s = samples
-    labels = np.zeros(len(s), dtype=int)#[None]*len(s)
-    centroids, clusters, cache = ([] for i in range(3))
+    labels = np.zeros(len(s), dtype=int)
+    clusters, cache = ([] for i in range(2))
 
     for i in range(k):
         v =rvectors()
         c = Centroid(v,i)
-        centroids.append(c)
+        CENTROIDS.append(c)
         clusters.append(Cluster([],0.0,c))
         cache.append(0.0)
         print(c.str())                                  #TESTING TODO REMOVE
 
-    error = calc_error(centroids,cache)
+    error = calc_error(cache)
 
     #Perform clustering
     while error > THRESHOLD:
         for i in range(len(s)):
             #Map centroid/cluster id to the ith pixel
-            cid = label(s[i],centroids)
-            labels[i] = cid#label(s[i],centroids)
+            cid = label(s[i])
+            labels[i] = cid
             clusters[cid].append(s[i])
-        cache = [centroids[i].get_value() for i in range(k)]
+        cache = [CENTROIDS[i].get_value() for i in range(k)]
         for i in range(k):
-            centroids[i].update(clusters[i].get_mean())
-            clusters[i] = Cluster([],0.0,centroids[i])
-        error = calc_error(centroids,cache)
+            #Update each centroid with the mean cluster value
+            CENTROIDS[i].update(clusters[i].get_mean())
+            clusters[i] = Cluster([],0.0,CENTROIDS[i])
+        error = calc_error(cache)
 
-    return [labels, centroids]
+    return labels
 
 
 def segmentation(image, features):
@@ -266,7 +295,8 @@ def segmentation(image, features):
     clusters,img = quantize(image, features, K)
     #Reshape back to the original image dimensions
     img = o_reshape(img, features, image, False)
-    img = img.astype(int)
+    img = img.astype(np.uint8)
+    img = f_convert(img, features, True)
 
     name = F+'-k'+str(K)
     write_result(None, img, name)
@@ -276,8 +306,7 @@ def segmentation(image, features):
 def cli():
     '''
     Command Line Interface that handles optional paramaters for execution.
-    Execution options:
-        python seg.py -f -k
+    Execution: python seg.py -f -k
         -f: feature specification [e.g. RGB,HSV,LAB,GRY]
         -k: number of clusters [e.g. 6]
     @params:
