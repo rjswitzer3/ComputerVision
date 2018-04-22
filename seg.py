@@ -127,7 +127,7 @@ def euclidean(a, b, ax=1):
     return np.linalg.norm(a - b)
 
 
-def rvectors():
+def rand_vectors():
     '''
     Generate random values based on the feature colorspace.
     @params:
@@ -141,7 +141,7 @@ def rvectors():
     return rv
 
 
-def o_reshape(arr, feature, image, flat):
+def img_reshape(arr, feature, image, flat):
     '''
     Wrapper for np.reshape() that reshapes the array to the designated depth and
     image dimensions.
@@ -159,7 +159,7 @@ def o_reshape(arr, feature, image, flat):
         return arr.reshape((image.shape[0]*image.shape[1], len(FEATURES[feature])))
 
 
-def f_convert(image, features, revert):
+def cs_convert(image, features, revert):
     '''
     Wrapper for cv2.cvtColor() that converts the image to the designated feature
     colorspace or reverts from back to RGB.
@@ -232,10 +232,9 @@ def quantize(image, features, k):
         cmap: array of cluster IDs corresponding cluster IDs to mean intensities
     '''
     #Convert the image based on features
-    image = f_convert(image, features, False)
-
+    image = cs_convert(image, features, False)
     #Flatten the image & perform kmeans
-    samples = o_reshape(image, features, image, True)
+    samples = img_reshape(image, features, image, True)
     cluster = kmeans(samples,k)
     cmap = np.zeros(samples.shape)
 
@@ -255,14 +254,14 @@ def kmeans(samples, k):
         samples: image features
         k: number of clusters
     @returns:
-        cluster: array of cluster assignment
+        labels: array of cluster assignment
     '''
     s = samples
     labels = np.zeros(len(s), dtype=int)
     clusters, cache = ([] for i in range(2))
 
     for i in range(k):
-        v =rvectors()
+        v =rand_vectors()
         c = Centroid(v,i)
         CENTROIDS.append(c)
         clusters.append(Cluster([],0.0,c))
@@ -294,9 +293,9 @@ def segmentation(image, features):
     '''
     clusters,img = quantize(image, features, K)
     #Reshape back to the original image dimensions
-    img = o_reshape(img, features, image, False)
+    img = img_reshape(img, features, image, False)
     img = img.astype(np.uint8)
-    img = f_convert(img, features, True)
+    img = cs_convert(img, features, True)
 
     name = F+'-k'+str(K)
     write_result(None, img, name)
@@ -316,6 +315,12 @@ def cli():
     '''
     if (len(sys.argv) < 2):
         print('Need target image')
+        print('Usage: python seg.py <image path> [-f <colorspace>] [-k <clusters>]')
+        print('\nOptional flags:')
+        print('\t-f colorspace\tRGB,HSV,LAB,GRY')
+        print('\t-k clusters\t# of clusters (e.g. 6)')
+        print('\nExample:')
+        print('\tpython seg.py images/lambo.jpg HSV 7\n')
         sys.exit()
     if (len(sys.argv) > 2):
         global F
